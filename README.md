@@ -51,8 +51,8 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Download the trained model `weapon_v2.pt` from [add model link here] and place it in the
-   project folder.
+3. Download the trained model `weapon_v2.pt` from [(https://drive.google.com/file/d/1Y8CDOySEKD2t9JgYBGNq6d1BZn-A0Ovk/view?usp=sharing)] and place it in the
+project folder.
 
 ## Run
 
