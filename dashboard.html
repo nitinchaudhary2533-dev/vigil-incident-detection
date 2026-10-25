@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VIGIL Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; background: #f4f6f8; }
+  h1 { color: #0B2545; margin-bottom: 4px; }
+  #info { color: #555; margin-bottom: 16px; }
+  table { border-collapse: collapse; width: 100%; background: white; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+  th { background: #0B2545; color: white; }
+  .HIGH { background: #d62828; color: white; padding: 2px 8px; border-radius: 4px; }
+  .MEDIUM { background: #f77f00; color: white; padding: 2px 8px; border-radius: 4px; }
+  .LOW { background: #888; color: white; padding: 2px 8px; border-radius: 4px; }
+  .confirmed { color: #2a9d8f; font-weight: bold; }
+  .false_alarm { color: #888; font-weight: bold; }
+  .pending { color: #f77f00; font-weight: bold; }
+  button { margin-right: 4px; padding: 4px 8px; cursor: pointer; }
+  #map { height: 350px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+  <h1>VIGIL Dashboard</h1>
+  <div id="info">Total incidents: <b id="count">0</b> | Server: <b id="status">...</b></div>
+    <div id="map"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Time</th><th>Label</th><th>Score</th>
+        <th>Tier</th><th>Clip</th><th>Status</th><th>Action</th><th>Alert sent to</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const API = "http://127.0.0.1:8000";
+    const map = L.map("map").setView([28.6139, 77.2090], 12);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  const markers = L.layerGroup().addTo(map);
+  let fitted = false;
+
+    async function loadTeams() {
+    const res = await fetch(API + "/teams");
+    const teams = await res.json();
+    for (const t of teams) {
+      L.circleMarker([t.lat, t.lon], { radius: 6, color: "#1d4ed8" })
+        .addTo(map)
+        .bindTooltip(t.name);
+    }
+  }
+  loadTeams();
+
+  function makeCell(text) {
+    const td = document.createElement("td");
+    td.textContent = text;
+    return td;
+  }
+
+  async function sendReview(id, decision) {
+    await fetch(API + "/incidents/" + id + "/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: decision, operator: "operator1" }),
+    });
+    loadIncidents();
+  }
+
+  async function loadIncidents() {
+    try {
+      const res = await fetch(API + "/incidents");
+      const data = await res.json();
+
+      document.getElementById("count").textContent = data.length;
+      document.getElementById("status").textContent = "Connected";
+
+      const body = document.getElementById("rows");
+      body.innerHTML = "";
+            markers.clearLayers();
+      const points = [];
+
+      for (const inc of data) {
+        const tr = document.createElement("tr");
+        tr.appendChild(makeCell(inc.id));
+        tr.appendChild(makeCell(inc.time));
+        tr.appendChild(makeCell(inc.label));
+        tr.appendChild(makeCell(inc.score));
+
+        const tierCell = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = inc.tier;
+        badge.textContent = inc.tier;
+        tierCell.appendChild(badge);
+        tr.appendChild(tierCell);
+
+        const clipCell = document.createElement("td");
+        const link = document.createElement("a");
+        link.href = API + "/clips/" + inc.id;
+        link.target = "_blank";
+        link.textContent = "Open clip";
+        clipCell.appendChild(link);
+        tr.appendChild(clipCell);
+
+        const statusCell = document.createElement("td");
+        const statusSpan = document.createElement("span");
+        statusSpan.className = inc.status;
+        statusSpan.textContent = inc.status;
+        statusCell.appendChild(statusSpan);
+        tr.appendChild(statusCell);
+
+        const actionCell = document.createElement("td");
+        const confirmBtn = document.createElement("button");
+        confirmBtn.textContent = "Confirm";
+        confirmBtn.onclick = () => sendReview(inc.id, "confirmed");
+        const falseBtn = document.createElement("button");
+        falseBtn.textContent = "False alarm";
+        falseBtn.onclick = () => sendReview(inc.id, "false_alarm");
+        actionCell.appendChild(confirmBtn);
+        actionCell.appendChild(falseBtn);
+        tr.appendChild(actionCell);
+
+                const alertCell = document.createElement("td");
+        if (inc.alert) {
+          alertCell.textContent =
+            inc.alert.type + ": " + inc.alert.team + " (" + inc.alert.distance_km + " km)";
+        } else {
+          alertCell.textContent = "-";
+        }
+        tr.appendChild(alertCell);
+
+                if (inc.lat != null && inc.lon != null) {
+          const marker = L.circleMarker([inc.lat, inc.lon], {
+            radius: 9,
+            color: inc.tier === "HIGH" ? "#d62828" : "#f77f00",
+          }).addTo(markers);
+          const pop = document.createElement("div");
+          pop.textContent = inc.id + " | " + inc.label + " | " + inc.score + " | " + inc.status;
+          marker.bindPopup(pop);
+          points.push([inc.lat, inc.lon]);
+        }
+
+        body.appendChild(tr);
+      } 
+            if (points.length > 0 && !fitted) {
+        map.fitBounds(points, { maxZoom: 16 });
+        fitted = true;
+      }
+    } catch (err) {
+        console.error(err);
+      document.getElementById("status").textContent = "Server band hai";
+    }
+  }
+
+  loadIncidents();
+  setInterval(loadIncidents, 3000);
+</script>
+</body>
+</html>

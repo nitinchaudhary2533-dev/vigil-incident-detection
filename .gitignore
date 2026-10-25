@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+evidence/
+ledger.jsonl
+reviews.jsonl
+test_images/
+test_results/
+old/
+*.pt
+.env
